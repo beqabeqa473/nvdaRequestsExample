@@ -58,4 +58,4 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
             ui.message(_("IP is not valid"))
             return
         threading.Thread(target=self.getIpInfo,args=(text,)).start()
-    ui.message(_("Retrieving information for IP"))
+        ui.message(_("Retrieving information for IP"))
