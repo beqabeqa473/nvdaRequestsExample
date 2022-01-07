@@ -1,7 +1,9 @@
 import addonHandler
 import api
+import config
 import globalPluginHandler
 import globalVars
+import gui
 import os
 import re
 from scriptHandler import script
@@ -14,9 +16,20 @@ del sys.path[-1]
 import textInfos
 import threading
 import ui
+import wx
+
 addonHandler.initTranslation()
 
 IP = re.compile(r"^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$")
+shorteners = pyshorteners.Shortener()
+
+confspec = {
+    "service": "string(default=clckru)",
+    "copyResult": "boolean(default=false)",
+}
+config.conf.spec["RequestsExample"] = confspec
+addonConfig = config.conf["RequestsExample"]
+
 
 class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 
@@ -27,7 +40,10 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
         if globalVars.appArgs.secure:
             return
         self.shorteners = pyshorteners.Shortener()
+        gui.settingsDialogs.NVDASettingsDialog.categoryClasses.append(RequestsExampleSettingsPanel)
 
+    def terminate(self):
+        gui.settingsDialogs.NVDASettingsDialog.categoryClasses.remove(RequestsExampleSettingsPanel)
 
     def getIpInfo(self, ip):
         response=requests.get("https://api.2ip.ua/geo.json", params={"ip":ip})
@@ -40,7 +56,12 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
         ui.browseableMessage("\n".join(finalString.split(". ")), "IP information")
 
     def shortenURL(self, url):
-        shortenURL = self.shorteners.clckru.short(url)
+        shortener = getattr(shorteners, addonConfig["service"], None)
+        shortenURL = shortener.short(url)
+        if addonConfig["copyResult"]:
+            if 			api.copyToClip(shortenURL):
+                ui.message(_("Shortened url copied to clipboard"))
+            return
         ui.browseableMessage(shortenURL, "Shortened URL")
 
     def getSelectedText(self):
@@ -78,3 +99,17 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
             return
         threading.Thread(target=self.shortenURL,args=(text,)).start()
         ui.message(_("Shortening URL"))
+
+class RequestsExampleSettingsPanel(gui.settingsDialogs.SettingsPanel):
+    title = _("Requests example")
+
+    def makeSettings(self, sizer):
+        helper = gui.guiHelper.BoxSizerHelper(self, sizer=sizer)
+        self.shortenersCB = helper.addLabeledControl(_("URL shortening service:"), wx.Choice, choices=[i for i in shorteners.available_shorteners])
+        self.shortenersCB.SetSelection(self.shortenersCB.FindString(addonConfig["service"]))
+        self.copyResultCHK = helper.addItem(wx.CheckBox(self, label=_("Copy shortened url to clipboard")))
+        self.copyResultCHK.SetValue(addonConfig["copyResult"])
+
+    def onSave(self):
+        addonConfig["service"] = self.shortenersCB.GetStringSelection()
+        addonConfig["copyResult"] = self.copyResultCHK.GetValue()
