@@ -8,6 +8,7 @@ from scriptHandler import script
 import sys
 impPath = os.path.join(os.path.abspath(os.path.dirname(__file__)), "lib")
 sys.path.append(impPath)
+import pyshorteners
 import requests
 del sys.path[-1]
 import textInfos
@@ -25,6 +26,8 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
         super().__init__(*args, **kwargs)
         if globalVars.appArgs.secure:
             return
+        self.shorteners = pyshorteners.Shortener()
+
 
     def getIpInfo(self, ip):
         response=requests.get("https://api.2ip.ua/geo.json", params={"ip":ip})
@@ -35,6 +38,10 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
         city = response["city_rus"] if 'city_rus' in response else response["city"]
         finalString = f"country: {country}. region: {region}. city: {city}"
         ui.browseableMessage("\n".join(finalString.split(". ")), "IP information")
+
+    def shortenURL(self, url):
+        shortenURL = self.shorteners.clckru.short(url)
+        ui.browseableMessage(shortenURL, "Shortened URL")
 
     def getSelectedText(self):
         obj = api.getCaretObject()
@@ -59,3 +66,15 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
             return
         threading.Thread(target=self.getIpInfo,args=(text,)).start()
         ui.message(_("Retrieving information for IP"))
+
+    @script(
+        description=_("Shortens url."),
+        gesture="kb:NVDA+shift+u"
+    )
+    def script_shortenURL(self, gesture):
+        text = self.getSelectedText()
+        if not text:
+            ui.message(_("Select something first"))
+            return
+        threading.Thread(target=self.shortenURL,args=(text,)).start()
+        ui.message(_("Shortening URL"))
